@@ -15,7 +15,6 @@ const remplacerRouter = require('./remplacements');
 const fournisseursRoutes = require('./fournisseurs');
 const facturesRoutes = require('./factures');
 const specialOrdersRoutes = require('./specialOrders');
-const dettesRoutes = require('./dettes'); // <-- 1. IMPORT DE LA NOUVELLE ROUTE
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -61,7 +60,6 @@ app.use('/api/remplacements', remplacerRouter);
 app.use('/api/fournisseurs', fournisseursRoutes);
 app.use('/api/factures', facturesRoutes);
 app.use('/api/special-orders', specialOrdersRoutes);
-app.use('/api/dettes', dettesRoutes); // <-- 2. UTILISATION DE LA NOUVELLE ROUTE
 
 // Route pour les statistiques du tableau de bord (mise à jour)
 app.get('/api/reports/dashboard-stats', async (req, res) => {
