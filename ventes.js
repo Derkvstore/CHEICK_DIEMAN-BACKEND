@@ -364,12 +364,17 @@ router.post('/cancel-item', async (req, res) => {
         return res.status(404).json({ error: 'Article de vente non trouvé ou déjà annulé.' });
     }
 
-    if (!is_special_sale_item && produitId) {
+    // ================== CORRECTION ICI ==================
+    // On remet le produit en stock si c'est un produit standard (qui a un produit_id)
+    // On ne vérifie plus si c'est une "facture spéciale" ou non.
+    if (produitId) {
         await clientDb.query(
             'UPDATE products SET status = $1 WHERE id = $2 AND imei = $3',
             ['active', produitId, imei]
         );
     }
+    // ================== FIN DE LA CORRECTION ==================
+
 
     // Recalculer le montant total de la vente après annulation de l'article
     const recalculatedSaleTotalResult = await clientDb.query(
