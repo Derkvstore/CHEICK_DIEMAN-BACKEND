@@ -691,7 +691,7 @@ router.post('/mark-as-rendu', async (req, res) => {
     // Et incrémenter la quantité existante (quantite + 1)
     if (produit_id) {
       await clientDb.query(
-        'UPDATE products SET status = $1, quantite = quantite + 1 WHERE id = $2 AND imei = $3',
+        'UPDATE products SET status = $1, quantite = 1 WHERE id = $2 AND imei = $3',
         ['active', produit_id, imei]
       );
     }
