@@ -804,12 +804,12 @@ router.get('/:id/pdf', async (req, res) => {
                   'nom_fournisseur', f.nom
               )
               ORDER BY vi.id
-          ) AS articles
+          ) FILTER (WHERE vi.statut_vente = 'actif') AS articles
       FROM
           ventes v
       JOIN
           clients c ON v.client_id = c.id
-      JOIN
+      LEFT JOIN
           vente_items vi ON v.id = vi.vente_id
       LEFT JOIN
           products p ON vi.produit_id = p.id
@@ -828,14 +828,14 @@ router.get('/:id/pdf', async (req, res) => {
 
     const sale = result.rows[0];
     const balanceDue = sale.montant_total - sale.montant_paye;
-    const totalPieces = sale.articles.reduce((acc, item) => acc + item.quantite_vendue, 0);
+    const totalPieces = (sale.articles || []).reduce((acc, item) => acc + item.quantite_vendue, 0);
 
-    let articlesHtml = sale.articles.map(item => {
+    let articlesHtml = (sale.articles || []).map(item => {
       let descriptionParts = [item.marque, item.modele];
       if (item.stockage) descriptionParts.push(`${item.stockage}`);
       if (item.type_carton) descriptionParts.push(`(Carton ${item.type_carton})`);
       if (item.type && item.type !== 'CARTON') descriptionParts.push(`(${item.type})`);
-      
+
       const itemDescription = descriptionParts.join(' ');
       const totalPrice = item.prix_unitaire_vente * item.quantite_vendue;
 
@@ -1001,17 +1001,17 @@ router.get('/:id/pdf', async (req, res) => {
 
     const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
     const page = await browser.newPage();
-    
+
     // Utilisez page.setContent pour injecter votre HTML et attendre que le réseau soit inactif
     await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
-    
+
     const pdfBuffer = await page.pdf({
       format: 'A4',
       printBackground: true, // Pour que les couleurs de fond soient incluses
     });
-    
+
     await browser.close();
-    
+
     res.set({
       'Content-Type': 'application/pdf',
       'Content-Disposition': `attachment; filename=facture_${venteId}.pdf`,
@@ -1026,7 +1026,6 @@ router.get('/:id/pdf', async (req, res) => {
     if (clientDb) clientDb.release();
   }
 });
-
 
 // NOUVELLE ROUTE: GET /api/ventes/consolidated-invoice/:clientName/pdf
 // Génère une facture PDF consolidée pour un client, regroupant tous ses articles actifs
