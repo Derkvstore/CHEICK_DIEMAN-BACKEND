@@ -1138,7 +1138,7 @@ router.get('/consolidated-invoice/:clientName/pdf', async (req, res) => {
                         <p style="font-size: 11px; color: #666; margin-top: 6px;">Halle de Bamako<br/>Tél: 71 71 78 01</p>
                     </div>
                     <div class="header-info">
-                        <h2>Facture Consolidée</h2>
+                        <h2>Facture de detail </h2>
                         <p><strong>Client:</strong> ${consolidatedData.client_nom}</p>
                         <p><strong>Date:</strong> ${formatDate(new Date())}</p>
                     </div>
