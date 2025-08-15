@@ -366,7 +366,6 @@ router.post('/cancel-item', async (req, res) => {
 
     // ================== CORRECTION ICI ==================
     // On remet le produit en stock si c'est un produit standard (qui a un produit_id)
-    // On ne vérifie plus si c'est une "facture spéciale" ou non.
     if (produitId) {
         await clientDb.query(
             'UPDATE products SET status = $1 WHERE id = $2 AND imei = $3',
@@ -564,13 +563,15 @@ router.post('/return-item', async (req, res) => {
         return res.status(404).json({ error: 'Article de vente non trouvé ou déjà retourné.' });
     }
 
-    // Si ce n'est pas un article de facture spéciale, mettre à jour le statut du produit dans l'inventaire
-    if (!is_special_sale_item && produit_id) {
+    // ================== CORRECTION ICI ==================
+    // Si c'est un produit standard (qui a un produit_id), on met à jour son statut
+    if (produit_id) {
         await clientDb.query(
             'UPDATE products SET status = $1 WHERE id = $2 AND imei = $3',
             ['returned', produit_id, imei] // Nouveau statut 'returned'
         );
     }
+    // ================== FIN DE LA CORRECTION ==================
 
     // Enregistrer le retour dans la table 'returns'
     const clientResult = await clientDb.query('SELECT id FROM clients WHERE nom = $1', [client_nom]);
@@ -688,7 +689,7 @@ router.post('/mark-as-rendu', async (req, res) => {
     }
 
     // 2. Remettre le produit en 'active' dans la table products SANS toucher à la date_ajout
-    // Et incrémenter la quantité existante (quantite + 1)
+    // Et remettre la quantité à 1
     if (produit_id) {
       await clientDb.query(
         'UPDATE products SET status = $1, quantite = 1 WHERE id = $2 AND imei = $3',
@@ -767,7 +768,6 @@ router.post('/mark-as-rendu', async (req, res) => {
     }
   }
 });
-
 
 
 // Route pour générer un PDF de la facture pour une vente donnée
@@ -1025,6 +1025,174 @@ router.get('/:id/pdf', async (req, res) => {
   } finally {
     if (clientDb) clientDb.release();
   }
+});
+
+
+// NOUVELLE ROUTE: GET /api/ventes/consolidated-invoice/:clientName/pdf
+// Génère une facture PDF consolidée pour un client, regroupant tous ses articles actifs
+router.get('/consolidated-invoice/:clientName/pdf', async (req, res) => {
+    const clientName = req.params.clientName;
+    let clientDb;
+
+    try {
+        clientDb = await pool.connect();
+
+        const consolidatedQuery = `
+            SELECT
+                c.nom AS client_nom,
+                c.telephone AS client_telephone,
+                JSON_AGG(
+                    JSON_BUILD_OBJECT(
+                        'vente_id', v.id,
+                        'date_vente', v.date_vente,
+                        'item_id', vi.id,
+                        'produit_id', vi.produit_id,
+                        'imei', vi.imei,
+                        'quantite_vendue', vi.quantite_vendue,
+                        'prix_unitaire_vente', vi.prix_unitaire_vente,
+                        'prix_unitaire_achat', vi.prix_unitaire_achat,
+                        'marque', vi.marque,
+                        'modele', vi.modele,
+                        'stockage', vi.stockage,
+                        'type_carton', vi.type_carton,
+                        'type', vi.type,
+                        'statut_vente', vi.statut_vente,
+                        'montant_total_vente', v.montant_total,
+                        'montant_paye_vente', v.montant_paye
+                    )
+                    ORDER BY v.date_vente DESC
+                ) AS articles
+            FROM
+                clients c
+            JOIN
+                ventes v ON c.id = v.client_id
+            JOIN
+                vente_items vi ON v.id = vi.vente_id
+            WHERE
+                c.nom ILIKE $1 AND vi.statut_vente = 'actif'
+            GROUP BY
+                c.nom, c.telephone;
+        `;
+        const result = await clientDb.query(consolidatedQuery, [`%${clientName}%`]);
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Aucun article actif trouvé pour ce client.' });
+        }
+
+        const consolidatedData = result.rows[0];
+        const totalItems = consolidatedData.articles.length;
+
+        // Calculer les totaux consolidés
+        const consolidatedTotal = consolidatedData.articles.reduce((sum, item) => sum + parseFloat(item.prix_unitaire_vente), 0);
+        const consolidatedPaid = consolidatedData.articles.reduce((sum, item) => {
+            const ratio = parseFloat(item.prix_unitaire_vente) / parseFloat(item.montant_total_vente);
+            return sum + (parseFloat(item.montant_paye_vente) * ratio);
+        }, 0);
+        const consolidatedBalanceDue = consolidatedTotal - consolidatedPaid;
+
+        let articlesHtml = consolidatedData.articles.map(item => {
+            const itemDescription = [
+                item.marque,
+                item.modele,
+                item.stockage,
+                item.type_carton ? `(Carton ${item.type_carton})` : '',
+                item.type && item.type !== 'CARTON' ? `(${item.type})` : ''
+            ].filter(Boolean).join(' ');
+
+            return `
+                <tr style="border-bottom: 1px solid #E5E7EB;">
+                    <td style="padding: 8px; text-align: left; font-size: 10px; width: 30%;">${itemDescription}</td>
+                    <td style="padding: 8px; text-align: left; font-size: 10px; width: 25%;">${item.imei}</td>
+                    <td style="padding: 8px; text-align: right; font-size: 10px; width: 10%;">1</td>
+                    <td style="padding: 8px; text-align: right; font-size: 10px; width: 15%;">${formatAmount(item.prix_unitaire_vente)}</td>
+                    <td style="padding: 8px; text-align: right; font-size: 10px; font-weight: 500; width: 20%;">${formatAmount(item.prix_unitaire_vente)}</td>
+                </tr>
+            `;
+        }).join('');
+
+        const htmlContent = `
+            <style>
+                * { box-sizing: border-box; }
+                body { font-family: -apple-system, BlinkMacSystemFont, "San Francisco", "Helvetica Neue", Helvetica, Arial, sans-serif; margin: 0; padding: 0; color: #1d1d1f; background-color: #ffffff; }
+                .invoice-container { max-width: 700px; margin: auto; padding: 40px; background: white; border-radius: 12px; border: 1px solid #eaeaea; }
+                .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid #ddd; padding-bottom: 20px; margin-bottom: 30px; }
+                .header-logo-container h1 { color: red; font-size: 24px; }
+                .header-info { text-align: right; }
+                .header-info h2 { font-size: 20px; margin: 0; font-weight: 600; }
+                .header-info p { margin: 4px 0; font-size: 13px; color: #555; }
+                .section-title { font-size: 16px; margin-bottom: 10px; font-weight: 600; color: #333; }
+                .invoice-details { margin-bottom: 30px; }
+                .invoice-details p { margin: 4px 0; font-size: 13px; }
+                table { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 30px; }
+                table thead th { text-align: left; border-bottom: 1px solid #ccc; padding: 8px 4px; font-weight: 600; color: #333; }
+                table tbody td { padding: 8px 4px; border-bottom: 1px solid #eee; }
+                .summary { text-align: right; max-width: 300px; margin-left: auto; background-color: #f9f9f9; padding: 15px; border-radius: 8px; border: 1px solid #eee; }
+                .summary p { margin: 6px 0; font-size: 14px; }
+                .summary h3 { margin-top: 10px; font-size: 18px; color: #d00; }
+                .footer { text-align: center; font-size: 12px; color: #aaa; margin-top: 40px; }
+            </style>
+            <div class="invoice-container">
+                <div class="header">
+                    <div class="header-logo-container">
+                        <h1>VAN CHOCO</h1>
+                        <p style="font-size: 11px; color: #666; margin-top: 6px;">Halle de Bamako<br/>Tél: 71 71 78 01</p>
+                    </div>
+                    <div class="header-info">
+                        <h2>Facture Consolidée</h2>
+                        <p><strong>Client:</strong> ${consolidatedData.client_nom}</p>
+                        <p><strong>Date:</strong> ${formatDate(new Date())}</p>
+                    </div>
+                </div>
+                <div class="invoice-details">
+                    <p class="section-title">Facturé à:</p>
+                    <p><strong>Nom:</strong> ${consolidatedData.client_nom}</p>
+                    <p><strong>Téléphone:</strong> ${consolidatedData.client_telephone || 'N/A'}</p>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Article</th>
+                            <th>IMEI</th>
+                            <th style="text-align: right;">Qté</th>
+                            <th style="text-align: right;">P.Unit</th>
+                            <th style="text-align: right;">Montant</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${articlesHtml}
+                    </tbody>
+                </table>
+                <p style="text-align: right; font-size: 13px;"><strong>Nombre de pièces:</strong> ${totalItems}</p>
+                <div class="summary">
+                    <p><strong>Montant total:</strong> ${formatAmount(consolidatedTotal)} CFA</p>
+                    <p><strong>Montant payé:</strong> ${formatAmount(consolidatedPaid)} CFA</p>
+                    <h3>Restant: ${formatAmount(consolidatedBalanceDue)} CFA</h3>
+                </div>
+                <div class="footer">
+                    <p>Merci pour votre achat !</p>
+                </div>
+            </div>
+        `;
+
+        const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+        const page = await browser.newPage();
+        await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
+        const pdfBuffer = await page.pdf({ format: 'A4', printBackground: true });
+        await browser.close();
+
+        res.set({
+            'Content-Type': 'application/pdf',
+            'Content-Disposition': `attachment; filename=facture_client_${clientName}.pdf`,
+            'Content-Length': pdfBuffer.length
+        });
+        res.send(pdfBuffer);
+
+    } catch (error) {
+        console.error('Erreur lors de la génération de la facture en detail:', error);
+        res.status(500).json({ error: 'Erreur serveur lors de la génération de la facture en detail.' });
+    } finally {
+        if (clientDb) clientDb.release();
+    }
 });
 
 module.exports = router;
