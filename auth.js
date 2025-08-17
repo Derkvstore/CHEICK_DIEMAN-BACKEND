@@ -1,6 +1,9 @@
+// backend/auth.js
 const { pool } = require('./db');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+// ➡️ Importez le middleware d'authentification que nous allons créer
+const { authenticateToken } = require('./authMiddleware');
 
 async function registerUser(req, res) {
   const { username, email, password, full_name } = req.body;
@@ -38,7 +41,8 @@ async function loginUser(req, res) {
   }
 
   try {
-    const result = await pool.query('SELECT id, username, password_hash, full_name FROM users WHERE username = $1', [username]);
+    // ➡️ Correction : Récupérer la colonne 'role' de l'utilisateur
+    const result = await pool.query('SELECT id, username, password_hash, full_name, role FROM users WHERE username = $1', [username]);
 
     if (result.rowCount === 0) {
       return res.status(401).json({ error: 'Utilisateur inconnu' });
@@ -56,24 +60,25 @@ async function loginUser(req, res) {
     // Stocker la session dans la base
     await pool.query('INSERT INTO sessions (user_id, token) VALUES ($1, $2)', [user.id, token]);
 
-    res.json({ message: 'Connecté', token, fullName: user.full_name, username: user.username });
+    // ➡️ Correction : Renvoyer la colonne 'role' dans la réponse
+    res.json({ message: 'Connecté', token, fullName: user.full_name, username: user.username, role: user.role });
   } catch (err) {
     console.error('Erreur login :', err);
     res.status(500).json({ error: 'Erreur serveur' });
   }
 }
 
-// Nouvelle fonction logout
+// ➡️ Version optimisée de logoutUser utilisant le middleware
+// Cette fonction sera appelée après authenticateToken,
+// donc req.user.userId sera déjà disponible.
 async function logoutUser(req, res) {
-  const token = req.headers.authorization?.split(' ')[1]; // Récupère le token dans le header Authorization: Bearer TOKEN
-
-  if (!token) {
-    return res.status(401).json({ error: 'Token manquant' });
-  }
+  // L'utilisateur est déjà authentifié par le middleware.
+  // On récupère son ID directement du token
+  const { userId } = req.user;
 
   try {
-    // Supprime la session correspondante dans la base
-    await pool.query('DELETE FROM sessions WHERE token = $1', [token]);
+    // Supprime toutes les sessions de cet utilisateur de la base de données.
+    await pool.query('DELETE FROM sessions WHERE user_id = $1', [userId]);
 
     res.json({ message: 'Déconnecté avec succès' });
   } catch (err) {
