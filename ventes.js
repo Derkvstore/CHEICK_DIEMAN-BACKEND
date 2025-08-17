@@ -954,8 +954,8 @@ router.get('/:id/pdf', async (req, res) => {
 <div class="invoice-container">
   <div class="header">
     <div class="header-logo-container">
-      <h1 color = "red" >VAN CHOCO </h1>
-      <p style="font-size: 11px; color: #666; margin-top: 6px;">Halle de Bamako<br/>Tél: 71 71 78 01</p>
+      <h1 color = "red" > CHEICK AUTHENTIQUE </h1>
+      <p style="font-size: 11px; color: #666; margin-top: 6px;">Halle de Bamako<br/>Tél: 74 09 09 83</p>
     </div>
     <div class="header-info">
       <h2>Facture</h2>
@@ -1133,8 +1133,8 @@ router.get('/consolidated-invoice/:clientName/pdf', async (req, res) => {
             <div class="invoice-container">
                 <div class="header">
                     <div class="header-logo-container">
-                        <h1>VAN CHOCO</h1>
-                        <p style="font-size: 11px; color: #666; margin-top: 6px;">Halle de Bamako<br/>Tél: 71 71 78 01</p>
+                        <h1>CHEICK AUTHENTIQUE</h1>
+                        <p style="font-size: 11px; color: #666; margin-top: 6px;">Halle de Bamako<br/>Tél: 74 09 09 83</p>
                     </div>
                     <div class="header-info">
                         <h2>Facture de detail </h2>

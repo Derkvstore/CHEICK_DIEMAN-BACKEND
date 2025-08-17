@@ -21,8 +21,8 @@ const PORT = process.env.env || 3001;
 
 // ✅ CORS autorisé pour Railway Front + localhost et ton site Vercel
 const allowedOrigins = [
-   'https://vanchoco-backend-production.up.railway.app',
-   'https://vanchoco-app.vercel.app',
+  //  'https://vanchoco-backend-production.up.railway.app',
+  //  'https://vanchoco-app.vercel.app',
    'http://localhost:5173'
 ];
 
