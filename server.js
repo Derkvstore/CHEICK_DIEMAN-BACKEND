@@ -96,25 +96,33 @@ app.get('/api/reports/dashboard-stats', async (req, res) => {
 });
 
 
-// Route bénéfices (CORRIGÉE POUR GÉRER LE PRIX NÉGOCIÉ)
+// Route bénéfices (CORRIGÉE POUR GÉRER TOUTES LES VENTES ACTIVES)
 app.get('/api/benefices', async (req, res) => {
   try {
-    // La CTE (Common Table Expression) calcule le prix de vente total original pour chaque vente
-    // afin de le comparer avec le prix final négocié.
     let query = `
-      WITH VenteItemsNegocies AS (
-          SELECT
-              vi.*,
-              v.date_vente AS date_vente_reelle,
-              v.montant_total AS montant_total_negocie,
-              SUM(vi.prix_unitaire_vente * vi.quantite_vendue) OVER (PARTITION BY v.id) as montant_total_original
-          FROM
-              vente_items vi
-          JOIN
-              ventes v ON vi.vente_id = v.id
-          WHERE
-              vi.statut_vente = 'actif'
-              AND v.statut_paiement = 'payee_integralement'
+      SELECT
+          vi.id AS vente_item_id,
+          vi.marque,
+          vi.modele,
+          vi.stockage,
+          vi.type,
+          vi.type_carton,
+          vi.imei,
+          vi.prix_unitaire_achat,
+          vi.prix_unitaire_vente,
+          vi.quantite_vendue,
+          -- Calcule le bénéfice unitaire simple (prix de vente - prix d'achat)
+          (vi.prix_unitaire_vente - vi.prix_unitaire_achat) AS benefice_unitaire_produit,
+          -- Calcule le bénéfice total pour la ligne
+          vi.quantite_vendue * (vi.prix_unitaire_vente - vi.prix_unitaire_achat) AS benefice_total_par_ligne,
+          v.date_vente
+      FROM
+          vente_items vi
+      JOIN
+          ventes v ON vi.vente_id = v.id
+      WHERE
+          vi.statut_vente = 'actif'
+          AND vi.is_special_sale_item = false
     `;
 
     const queryParams = [];
@@ -125,52 +133,14 @@ app.get('/api/benefices', async (req, res) => {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
         return res.status(400).json({ error: 'Format de date invalide. Utilisez YYYY-MM-DD.' });
       }
-      // Ajoute le filtre de date à l'intérieur de la CTE
       query += ` AND DATE(v.date_vente) = $${paramIndex}`;
       queryParams.push(date);
       paramIndex++;
     }
 
     query += `
-      )
-      SELECT
-          vin.id AS vente_item_id,
-          vin.marque,
-          vin.modele,
-          vin.stockage,
-          vin.type,
-          vin.type_carton,
-          vin.imei,
-          vin.prix_unitaire_achat,
-          -- Voici le nouveau prix de vente unitaire calculé.
-          -- Il est proportionnel au prix original de l'article.
-          -- On remplace 'prix_unitaire_vente' pour que le frontend l'affiche directement.
-          CASE
-              WHEN vin.montant_total_original > 0 THEN (vin.prix_unitaire_vente * vin.montant_total_negocie / vin.montant_total_original)
-              ELSE vin.prix_unitaire_vente -- Sécurité pour éviter la division par zéro
-          END AS prix_unitaire_vente,
-          vin.quantite_vendue,
-          -- Le bénéfice unitaire est (prix de vente négocié - prix d'achat)
-          (
-              CASE
-                  WHEN vin.montant_total_original > 0 THEN (vin.prix_unitaire_vente * vin.montant_total_negocie / vin.montant_total_original)
-                  ELSE vin.prix_unitaire_vente
-              END
-          ) - vin.prix_unitaire_achat AS benefice_unitaire_produit,
-          -- Le bénéfice total pour la ligne est (bénéfice unitaire * quantité)
-          vin.quantite_vendue * (
-              (
-                  CASE
-                      WHEN vin.montant_total_original > 0 THEN (vin.prix_unitaire_vente * vin.montant_total_negocie / vin.montant_total_original)
-                      ELSE vin.prix_unitaire_vente
-                  END
-              ) - vin.prix_unitaire_achat
-          ) AS benefice_total_par_ligne,
-          vin.date_vente_reelle AS date_vente
-      FROM
-          VenteItemsNegocies vin
       ORDER BY
-          vin.date_vente_reelle DESC;
+          v.date_vente DESC;
     `;
 
     const itemsResult = await pool.query(query, queryParams);
@@ -178,7 +148,6 @@ app.get('/api/benefices', async (req, res) => {
 
     let totalBeneficeGlobal = 0;
     soldItems.forEach(item => {
-      // Le bénéfice total est déjà calculé par ligne dans la requête SQL
       totalBeneficeGlobal += parseFloat(item.benefice_total_par_ligne);
     });
 
