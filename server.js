@@ -196,6 +196,6 @@ app.get('/api/benefices', async (req, res) => {
 
 /* --- DÉMARRAGE DU SERVEUR --- */
 app.listen(PORT, () => {
-  console.log('✅ Connexion à la base de données réussie Daff');
+  console.log('✅ Connexion à la base de données réussie');
   console.log(`🚀 Serveur backend lancé sur le port ${PORT}`);
 });
