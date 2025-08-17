@@ -21,7 +21,7 @@ const PORT = process.env.env || 3001;
 
 // ✅ CORS autorisé pour Railway Front + localhost et ton site Vercel
 const allowedOrigins = [
-   'cheickdieman-backend-production.up.railway.app',
+   'https://cheickdieman-backend-production.up.railway.app',
    'https://cheick-app.vercel.app',
    'http://localhost:5173'
 ];
