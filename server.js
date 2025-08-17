@@ -142,17 +142,17 @@ app.get('/api/benefices', async (req, res) => {
           vin.type_carton,
           vin.imei,
           vin.prix_unitaire_achat,
-          -- Le prix de vente ajusté dépend si c'est une facture spéciale ou non.
+          -- Le prix de vente ajusté dépend si une négociation a eu lieu.
           CASE
-              WHEN vin.is_facture_speciale AND vin.montant_total_original > 0
+              WHEN vin.montant_total_original > 0 AND vin.montant_total_negocie <> vin.montant_total_original
               THEN (vin.prix_unitaire_vente * vin.montant_total_negocie / vin.montant_total_original)
               ELSE vin.prix_unitaire_vente
-          END AS prix_de_vente_ajuste,
+          END AS prix_unitaire_vente,
           vin.quantite_vendue,
           -- Le bénéfice est calculé avec le prix de vente ajusté
           (
               CASE
-                  WHEN vin.is_facture_speciale AND vin.montant_total_original > 0
+                  WHEN vin.montant_total_original > 0 AND vin.montant_total_negocie <> vin.montant_total_original
                   THEN (vin.prix_unitaire_vente * vin.montant_total_negocie / vin.montant_total_original)
                   ELSE vin.prix_unitaire_vente
               END
@@ -161,12 +161,12 @@ app.get('/api/benefices', async (req, res) => {
           vin.quantite_vendue * (
               (
                   CASE
-                      WHEN vin.is_facture_speciale AND vin.montant_total_original > 0
-                      THEN (vin.prix_unitaire_vente * vin.montant_total_negocie / vin.montant_total_original)
-                      ELSE vin.prix_unitaire_vente
-                  END
-              ) - vin.prix_unitaire_achat
-          ) AS benefice_total_par_ligne,
+                      WHEN vin.montant_total_original > 0 AND vin.montant_total_negocie <> vin.montant_total_original
+                  THEN (vin.prix_unitaire_vente * vin.montant_total_negocie / vin.montant_total_original)
+                  ELSE vin.prix_unitaire_vente
+              END
+          ) - vin.prix_unitaire_achat
+      ) AS benefice_total_par_ligne,
           vin.date_vente_reelle AS date_vente
       FROM
           VenteItemsOriginal vin
