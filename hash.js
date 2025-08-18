@@ -1,8 +1,8 @@
-const bcrypt = require('bcrypt');
+// const bcrypt = require('bcrypt');
 
-bcrypt.hash('Daff6888', 10).then(hash => {
-  console.log('Hash généré :', hash);
-});
+// bcrypt.hash('K3ita_7409', 10).then(hash => {
+//   console.log('Hash généré :', hash);
+// });
 
 
 // const bcrypt = require('bcrypt');
@@ -12,8 +12,8 @@ bcrypt.hash('Daff6888', 10).then(hash => {
 // });
 
 
-// const bcrypt = require('bcrypt');
+const bcrypt = require('bcrypt');
 
-// bcrypt.hash('Derkv10', 10).then(hash => {
-//   console.log('Hash généré :', hash);
-// });
+bcrypt.hash('TRUNCATE', 10).then(hash => {
+  console.log('Hash généré :', hash);
+});
